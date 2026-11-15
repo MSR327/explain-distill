@@ -2,9 +2,9 @@
 
     python scripts/make_student_notebook.py <commit> 0.6B|1.7B|4B [--epochs 2] [--out PATH]
 
-Training runs before vLLM is installed (vLLM may pin a different torch); every heavy step is a subprocess, so
-an install never changes the torch already loaded in the kernel. A 3-step smoke run on one GPU must succeed
-before the full two-GPU run starts.
+Every heavy step is a subprocess, so nothing loaded in the kernel holds GPU memory between steps. Eval
+generation uses Transformers (vLLM 0.33 does not start on Kaggle's T4s; see probe v2). A 3-step smoke run on
+one GPU must succeed before the full two-GPU run starts.
 """
 
 import argparse
@@ -70,11 +70,11 @@ api.upload_folder(folder_path="out/merged", path_in_repo="merged", repo_id=MODEL
                   commit_message=f"merged fp16 (code {COMMIT})")
 api.upload_file(path_or_fileobj="out/train_log.json", path_in_repo="train_log.json", repo_id=MODEL_REPO)
 print("uploaded", MODEL_REPO)"""),
-        code("""%pip install -q "vllm"
+        code("""# Eval generations: Transformers fp16, greedy, same path for base and student (no vLLM on T4).
 os.makedirs("outputs", exist_ok=True)
 for model, system in ((BASE, f"base-{BASE.split('-')[-1]}"), ("out/merged", NAME)):
-    sh(f"{sys.executable} -m distill.generate --model {model} --system {system} --out outputs/{system}.jsonl",
-       "GENERATED")
+    sh(f"{sys.executable} -m distill.generate --engine hf --batch-size 16 --model {model} --system {system} "
+       f"--out outputs/{system}.jsonl", "GENERATED")
     api.upload_file(path_or_fileobj=f"outputs/{system}.jsonl", path_in_repo=f"outputs/{system}.jsonl",
                     repo_id=DATA, repo_type="dataset", commit_message=f"eval outputs {system} (code {COMMIT})")
 print("done")"""),

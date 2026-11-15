@@ -2,13 +2,15 @@
 
     python scripts/make_teacher_notebook.py <commit> resumes|explain [--out PATH]
 
-Each run: install vLLM + this package -> fail-fast HF auth -> smoke pass on a few items (raises if nothing is
-kept) -> full run -> upload the stage's output to the private HF dataset repo. The pairs stage runs locally
-between the two GPU stages (CPU work; no reason to hold a GPU for it).
+Each run: install this package (+ build llama.cpp CUDA, or vLLM) -> fail-fast HF auth -> smoke pass on a
+few items (raises if nothing is kept) -> full run -> upload the stage's output to the private HF dataset repo.
+The pairs stage runs locally between the two GPU stages (CPU work; no reason to hold a GPU for it).
 """
 
 import argparse
 import json
+
+from nbcommon import build_llama_cpp_cuda
 
 DATA_REPO = "explain-distill-data"  # private dataset repo under the token's account
 
@@ -30,10 +32,7 @@ STAGES = {
 
 
 TEACHER = "Qwen/Qwen3-14B-GGUF:Qwen3-14B-Q4_K_M.gguf"
-BUILD_CUDA = ("!git clone -q --depth 1 https://github.com/ggml-org/llama.cpp && cd llama.cpp && git log -1 --format=%h"
-              " && cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=75 -DLLAMA_CURL=OFF"
-              " -DCMAKE_BUILD_TYPE=Release > /dev/null && cmake --build build -j 4 --target llama-server"
-              " 2>&1 | tail -2 && ls build/bin | grep llama-server")
+
 
 
 def build(commit: str, stage: str, model: str = TEACHER, tp: int = 2, engine: str = "llamacpp",
@@ -46,8 +45,7 @@ def build(commit: str, stage: str, model: str = TEACHER, tp: int = 2, engine: st
            "built with CUDA for sm_75: vLLM 0.33 does not start on these GPUs (probe v1/v2)."),
         code(f'%pip install -q {install}"distill @ git+https://github.com/MSR327/explain-distill.git@{commit}"\n'
              f'COMMIT, STAGE, MODEL, TP, ENGINE = "{commit}", "{stage}", "{model}", {tp}, "{engine}"'),
-        *([code("# llama.cpp with CUDA for compute capability 7.5 (~10 min build)\n" + BUILD_CUDA)]
-          if engine == "llamacpp" else []),
+        *([code(build_llama_cpp_cuda())] if engine == "llamacpp" else []),
         code(f"""# Fail fast: HF token + write access before loading a 14B model.
 import os
 
@@ -79,6 +77,9 @@ def run(extra, data):
     print(*lines, sep="\\n")
     if p.returncode or not lines:
         print(p.stderr[-4000:])
+        import glob
+        for log in sorted(glob.glob("llama-server-*.log")):
+            print(f"--- {{log}} (tail) ---", open(log).read()[-2500:], sep="\\n")
         raise RuntimeError(f"stage failed: {{cmd}}")
     return lines
 
