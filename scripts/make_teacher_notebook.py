@@ -29,13 +29,15 @@ STAGES = {
 }
 
 
-def build(commit: str, stage: str, model: str = "Qwen/Qwen3-14B-AWQ", tp: int = 2) -> dict:
+def build(commit: str, stage: str, model: str = "Qwen/Qwen3-14B-AWQ", tp: int = 2, engine: str = "vllm",
+          vllm_spec: str = "vllm") -> dict:
     st = STAGES[stage]
+    install = f'"{vllm_spec}" ' if engine == "vllm" else ""
     cells = [
-        md(f"# Teacher data, stage `{stage}`\n\nTeacher {model} on vLLM (tp={tp}). Needs GPU T4 x2, Internet, "
+        md(f"# Teacher data, stage `{stage}`\n\nTeacher {model} on {engine} (tp={tp}). Needs GPU T4 x2, Internet, "
            "secret `hg` (HF write token). Output goes to a private HF dataset repo."),
-        code(f'%pip install -q "vllm" "distill @ git+https://github.com/MSR327/explain-distill.git@{commit}"\n'
-             f'COMMIT, STAGE, MODEL, TP = "{commit}", "{stage}", "{model}", {tp}'),
+        code(f'%pip install -q {install}"distill @ git+https://github.com/MSR327/explain-distill.git@{commit}"\n'
+             f'COMMIT, STAGE, MODEL, TP, ENGINE = "{commit}", "{stage}", "{model}", {tp}, "{engine}"'),
         code(f"""# Fail fast: HF token + write access before loading a 14B model.
 import os
 
@@ -60,7 +62,8 @@ def run(extra, data):
         os.makedirs(d, exist_ok=True)
     for name in {st["needs"]!r}:
         shutil.copy(f"data/{{name}}", f"{{data}}/{{name}}")
-    cmd = f"{{sys.executable}} -m distill.teacher {{STAGE}} --model {{MODEL}} --tp {{TP}} --data {{data}} {{extra}}"
+    cmd = (f"{{sys.executable}} -m distill.teacher {{STAGE}} --model {{MODEL}} --tp {{TP}} --engine {{ENGINE}} "
+           f"--data {{data}} {{extra}}")
     p = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     lines = [x for x in p.stdout.splitlines() if x.startswith("{st["marker"]}")]
     print(*lines, sep="\\n")
@@ -89,8 +92,11 @@ if __name__ == "__main__":
     ap.add_argument("commit")
     ap.add_argument("stage", choices=list(STAGES))
     ap.add_argument("--out")
+    ap.add_argument("--model", default="Qwen/Qwen3-14B-AWQ")
+    ap.add_argument("--engine", choices=["vllm", "hf"], default="vllm")
+    ap.add_argument("--vllm-spec", default="vllm", help='pip spec, e.g. "vllm==0.10.2"')
     a = ap.parse_args()
     out = a.out or f"notebooks/01_teacher_{a.stage}.ipynb"
     with open(out, "w") as f:
-        json.dump(build(a.commit, a.stage), f, indent=1)
+        json.dump(build(a.commit, a.stage, a.model, engine=a.engine, vllm_spec=a.vllm_spec), f, indent=1)
     print("written", out)

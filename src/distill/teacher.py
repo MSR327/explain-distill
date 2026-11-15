@@ -146,6 +146,8 @@ def main() -> None:
     ap.add_argument("stage", choices=["resumes", "pairs", "explain", "filter"])
     ap.add_argument("--model", default="Qwen/Qwen3-14B-AWQ")
     ap.add_argument("--tp", type=int, default=2)
+    ap.add_argument("--engine", choices=["vllm", "hf"], default="vllm")
+    ap.add_argument("--batch-size", type=int, default=16, help="hf engine only")
     ap.add_argument("--n-train", type=int, default=1000)
     ap.add_argument("--n-eval", type=int, default=120)
     ap.add_argument("--limit", type=int, default=None)
@@ -154,12 +156,13 @@ def main() -> None:
     data = Path(a.data)
 
     if a.stage == "resumes":
-        from .gen import VLLMGenerator
+        from .gen import make_generator
 
         index = load_index()
         jobs_by_id = {str(j["job_id"]): j for j in index.jobs.to_dict("records")}
         src = pick_sources(list(jobs_by_id), p2_eval_job_ids(), a.n_train, a.n_eval)[: a.limit]
-        rows, stats = make_resumes(VLLMGenerator(a.model, a.tp), [jobs_by_id[j] for j in src])
+        gen = make_generator(a.engine, a.model, a.tp, a.batch_size)
+        rows, stats = make_resumes(gen, [jobs_by_id[j] for j in src])
         _write(data / "resumes.jsonl", rows)
         print("RESUMES", json.dumps({"requested": len(src), **stats}), flush=True)
     elif a.stage == "pairs":
@@ -176,10 +179,11 @@ def main() -> None:
         _write(data / "pairs.jsonl", pairs)
         print("PAIRS", json.dumps(collections.Counter(f'{p["split"]}/{p["kind"]}' for p in pairs)), flush=True)
     elif a.stage == "explain":
-        from .gen import VLLMGenerator
+        from .gen import make_generator
 
         pairs = _read(data / "pairs.jsonl")[: a.limit]
-        texts = VLLMGenerator(a.model, a.tp).generate([p["messages"] for p in pairs], temperature=0.3, max_tokens=700)
+        gen = make_generator(a.engine, a.model, a.tp, a.batch_size)
+        texts = gen.generate([p["messages"] for p in pairs], temperature=0.3, max_tokens=700)
         _write(data / "teacher.jsonl", [{"resume_job_id": p["resume_job_id"], "job_id": p["job_id"],
                                          "model": a.model, "text": t} for p, t in zip(pairs, texts, strict=True)])
         print("TEACHER", len(texts), "outputs", flush=True)
