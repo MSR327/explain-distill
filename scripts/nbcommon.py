@@ -22,8 +22,14 @@ from huggingface_hub import HfApi, hf_hub_download
 from huggingface_hub.errors import EntryNotFoundError
 
 def _build_sh(cmd, log):
+    import time
     with open(log, "w") as f:
-        p = subprocess.run(cmd, shell=True, stdout=f, stderr=subprocess.STDOUT)
+        p = subprocess.Popen(cmd, shell=True, stdout=f, stderr=subprocess.STDOUT)
+        t0 = time.time()
+        while p.poll() is None:  # progress every minute: a silent 30-min build looks the same as a hung one
+            time.sleep(60)
+            pct = re.findall(r"\\[ *(\\d+)%\\]", open(log).read()[-4000:])
+            print(f"  {{log}}: {{(time.time() - t0) / 60:.0f}} min" + (f", {{pct[-1]}}%" if pct else ""), flush=True)
     if p.returncode:
         print(open(log).read()[-6000:])
         raise RuntimeError(f"failed: {{cmd}}")
