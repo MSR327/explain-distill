@@ -58,3 +58,15 @@ def test_run_filter_routes_by_split_and_counts_reasons():
     stats, train, ev = run_filter(pairs, teacher, {"r1": "python dev"}, {"j1": POSTING, "j2": POSTING})
     assert stats["kept"] == 1 and stats["reasons"] == {"no_json": 1} and ev == []
     assert train[0]["messages"][-1]["role"] == "assistant" and stats["by_kind"]["far"] == {"kept": 0, "total": 1}
+
+
+def test_importing_distill_keeps_jax_off_the_gpu():
+    # bm25s runs a JAX op at import; on a GPU box JAX would grab 75% of each GPU before llama-server starts.
+    import os
+    import subprocess
+    import sys
+
+    env = {k: v for k, v in os.environ.items() if k != "JAX_PLATFORMS"}
+    out = subprocess.run([sys.executable, "-c", "import distill, os; print(os.environ['JAX_PLATFORMS'])"],
+                         capture_output=True, text=True, env=env, check=True).stdout
+    assert out.strip() == "cpu"

@@ -83,9 +83,26 @@ class Server:
             except httpx.HTTPError:
                 pass
             if self.proc.poll() is not None:
-                raise RuntimeError(f"llama-server exited: {' '.join(self.cmd)}")
+                raise RuntimeError(f"llama-server exited: {' '.join(self.cmd)}\n{self._diagnose()}")
             time.sleep(0.5)
         raise TimeoutError("llama-server did not become healthy")
+
+    def _diagnose(self) -> str:
+        """GPU memory per device + the server's error lines: enough to tell OOM from a bad build or file."""
+        try:
+            def smi_csv(query):
+                return subprocess.run(["nvidia-smi", query, "--format=csv"], check=False, capture_output=True,
+                                      text=True, timeout=20).stdout
+
+            smi = smi_csv("--query-gpu=index,memory.used,memory.total")
+            procs = smi_csv("--query-compute-apps=pid,process_name,used_memory")
+        except (OSError, subprocess.TimeoutExpired):
+            smi = procs = "(no nvidia-smi)\n"
+        errs = ""
+        if self.log and os.path.exists(self.log):
+            errs = "".join(x for x in Path(self.log).read_text().splitlines(keepends=True)
+                           if " E " in x or "error" in x.lower())[-3000:]
+        return f"GPU memory:\n{smi}GPU processes:\n{procs}server errors:\n{errs}"
 
     def __exit__(self, *exc):
         self.proc.terminate()
