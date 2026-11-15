@@ -45,7 +45,6 @@ def build(commit: str, stage: str, model: str = TEACHER, tp: int = 2, engine: st
            "built with CUDA for sm_75: vLLM 0.33 does not start on these GPUs (probe v1/v2)."),
         code(f'%pip install -q {install}"distill @ git+https://github.com/MSR327/explain-distill.git@{commit}"\n'
              f'COMMIT, STAGE, MODEL, TP, ENGINE = "{commit}", "{stage}", "{model}", {tp}, "{engine}"'),
-        *([code(build_llama_cpp_cuda())] if engine == "llamacpp" else []),
         code(f"""# Fail fast: HF token + write access before loading a 14B model.
 import os
 
@@ -57,6 +56,7 @@ api = HfApi()
 REPO = f"{{api.whoami()['name']}}/{DATA_REPO}"
 api.create_repo(REPO, repo_type="dataset", private=True, exist_ok=True)
 print("HF auth ok ->", REPO)"""),
+        *([code(build_llama_cpp_cuda())] if engine == "llamacpp" else []),
         code(f"""from huggingface_hub import hf_hub_download
 import shutil
 os.makedirs("data", exist_ok=True)

@@ -38,7 +38,6 @@ def build(commit: str, size: str) -> dict:
         code(f'%pip install -q "bitsandbytes" "datasets" '
              f'"distill @ git+https://github.com/MSR327/explain-distill.git@{commit}"\n'
              f'COMMIT, NAME, SIZE = "{commit}", "{name}", "{size}"'),
-        code(build_llama_cpp_cuda("llama-server llama-quantize")),
         code(f"""import os, shutil, subprocess, sys, json, glob
 
 from huggingface_hub import HfApi, hf_hub_download, snapshot_download
@@ -68,6 +67,7 @@ def upload(system):
     for f in glob.glob(f"outputs/{{system}}*"):
         api.upload_file(path_or_fileobj=f, path_in_repo=f"bench/{{os.path.basename(f)}}", repo_id=DATA,
                         repo_type="dataset", commit_message=f"bench {{system}} (code {{COMMIT}})")"""),
+        code(build_llama_cpp_cuda("llama-server llama-quantize")),
         code("""# Transformers baselines, one request at a time on GPU 0.
 for tag, extra in (("hf-fp16", ""), ("hf-nf4", "--load-4bit")):
     sh(f"CUDA_VISIBLE_DEVICES=0 {sys.executable} -m distill.bench_hf --model {MERGED} --n 30 {extra} "
