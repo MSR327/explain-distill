@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "distill"
+version = "0.1.0"
+description = "Distill grounded job-match explanations into small open LLMs, then benchmark how to serve them"
+requires-python = ">=3.10"
+# jobmatch (project 2) provides the exact prompt, JSON parser and citation check the app uses.
+dependencies = ["jobmatch @ git+https://github.com/MSR327/resume-job-matcher.git@81320b5", "numpy", "pandas"]
+
+[project.optional-dependencies]
+# Building (resume, job) pairs runs project 2's torch-free retrieval + skill extraction.
+pairs = ["onnxruntime>=1.17", "transformers>=4.45", "tokenizers", "huggingface_hub",
+         "skillex[onnx] @ git+https://github.com/MSR327/skillspan-ner.git@dddcbb1"]
+gen = ["vllm"]
+dev = ["pytest", "ruff"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF", "PL"]
+ignore = ["PLR0913", "PLR0917", "PLR2004", "PLR0912", "PLR0915", "PLC0415"]
