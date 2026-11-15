@@ -72,11 +72,18 @@ def run(extra, data):
         shutil.copy(f"data/{{name}}", f"{{data}}/{{name}}")
     cmd = (f"{{sys.executable}} -m distill.teacher {{STAGE}} --model {{MODEL}} --tp {{TP}} --engine {{ENGINE}} "
            f"--data {{data}} {{extra}}")
-    p = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    lines = [x for x in p.stdout.splitlines() if x.startswith("{st["marker"]}")]
-    print(*lines, sep="\\n")
+    # Stream progress ("generated N/M X min") live so a long run is visibly alive; stderr goes to a file.
+    lines = []
+    with open(f"{{data}}/stderr.log", "w") as err:
+        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=err, text=True, bufsize=1)
+        for x in p.stdout:
+            if x.startswith(("{st["marker"]}", "generated")):
+                print(x.rstrip(), flush=True)
+            if x.startswith("{st["marker"]}"):
+                lines.append(x.rstrip())
+        p.wait()
     if p.returncode or not lines:
-        print(p.stderr[-4000:])
+        print(open(f"{{data}}/stderr.log").read()[-4000:])
         import glob
         for log in sorted(glob.glob("llama-server-*.log")):
             print(f"--- {{log}} (tail) ---", open(log).read()[-2500:], sep="\\n")
