@@ -1,6 +1,7 @@
 """vLLM serving benchmark for one model/format on the GPU it runs on.
 
-    python -m distill.bench_vllm --model out/w4a16 --system student-1.7b-w4a16 --out data/outputs/student-1.7b-w4a16.jsonl
+    python -m distill.bench_vllm --model out/w4a16 --system student-1.7b-w4a16 \
+        --out data/outputs/student-1.7b-w4a16.jsonl
 
 Two numbers per format, because they answer different questions:
 - throughput: all eval prompts submitted at once (continuous batching), output tokens/s and requests/s:
