@@ -19,7 +19,9 @@ from pathlib import Path
 
 import numpy as np
 
-KAGGLE_T4_EQUIV_USD_PER_H = 0.35  # on-demand price of a cloud T4 (e.g. GCP n1 + T4), for a $/1k-requests estimate
+# GCP on-demand price of one T4, GPU only (cloud.google.com/products/compute/gpus-pricing, checked 2026-11-15).
+# The VM is extra, so $/1k requests computed from it is a lower bound.
+T4_USD_PER_GPU_HOUR = 0.35
 
 
 def main() -> None:
@@ -67,7 +69,7 @@ def main() -> None:
     summary = {"system": a.system, "engine": "vllm", "model": a.model, "quantization": a.quantization,
                "size_gb": round(size, 3) if size else None, "load_s": round(load_s, 1), "n": len(outs),
                "throughput_gen_tok_s": gen_tokens / thr_s, "throughput_req_s": req_per_s,
-               "usd_per_1k_requests": KAGGLE_T4_EQUIV_USD_PER_H / 3600 / req_per_s * 1000,
+               "usd_per_1k_requests": T4_USD_PER_GPU_HOUR / 3600 / req_per_s * 1000,
                "latency_p50_s": float(np.percentile(lat, 50)), "latency_p95_s": float(np.percentile(lat, 95)),
                "gen_tokens_mean": gen_tokens / len(outs)}
     Path(a.out).with_suffix(".bench.json").write_text(json.dumps(summary, indent=1))
