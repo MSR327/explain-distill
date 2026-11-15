@@ -22,13 +22,15 @@ def main() -> None:
     ap.add_argument("--pairs", default="data/pairs.jsonl")
     ap.add_argument("--split", default="eval")
     ap.add_argument("--tp", type=int, default=1)
-    ap.add_argument("--engine", choices=["vllm", "hf"], default="vllm")
+    ap.add_argument("--engine", choices=["vllm", "hf", "llamacpp"], default="vllm")
+    ap.add_argument("--tokenizer", default=None, help="llamacpp engine: HF repo with the chat template")
+    ap.add_argument("--llama-cpp", default="llama.cpp")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     pairs = [p for p in map(json.loads, Path(a.pairs).read_text().splitlines()) if p["split"] == a.split][: a.limit]
     t = time.time()
-    gen = make_generator(a.engine, a.model, a.tp)
+    gen = make_generator(a.engine, a.model, a.tp, tokenizer=a.tokenizer, llama_cpp=a.llama_cpp)
     load_s = time.time() - t
     t = time.time()
     texts = gen.generate([p["messages"] for p in pairs], temperature=0.0, max_tokens=700)

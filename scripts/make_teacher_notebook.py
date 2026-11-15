@@ -29,15 +29,25 @@ STAGES = {
 }
 
 
-def build(commit: str, stage: str, model: str = "Qwen/Qwen3-14B-AWQ", tp: int = 2, engine: str = "vllm",
+TEACHER = "Qwen/Qwen3-14B-GGUF:Qwen3-14B-Q4_K_M.gguf"
+BUILD_CUDA = ("!git clone -q --depth 1 https://github.com/ggml-org/llama.cpp && cd llama.cpp && git log -1 --format=%h"
+              " && cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=75 -DLLAMA_CURL=OFF"
+              " -DCMAKE_BUILD_TYPE=Release > /dev/null && cmake --build build -j 4 --target llama-server"
+              " 2>&1 | tail -2 && ls build/bin | grep llama-server")
+
+
+def build(commit: str, stage: str, model: str = TEACHER, tp: int = 2, engine: str = "llamacpp",
           vllm_spec: str = "vllm") -> dict:
     st = STAGES[stage]
     install = f'"{vllm_spec}" ' if engine == "vllm" else ""
     cells = [
         md(f"# Teacher data, stage `{stage}`\n\nTeacher {model} on {engine} (tp={tp}). Needs GPU T4 x2, Internet, "
-           "secret `hg` (HF write token). Output goes to a private HF dataset repo."),
+           "secret `hg` (HF write token). Output goes to a private HF dataset repo. On T4s the engine is llama.cpp "
+           "built with CUDA for sm_75: vLLM 0.33 does not start on these GPUs (probe v1/v2)."),
         code(f'%pip install -q {install}"distill @ git+https://github.com/MSR327/explain-distill.git@{commit}"\n'
              f'COMMIT, STAGE, MODEL, TP, ENGINE = "{commit}", "{stage}", "{model}", {tp}, "{engine}"'),
+        *([code("# llama.cpp with CUDA for compute capability 7.5 (~10 min build)\n" + BUILD_CUDA)]
+          if engine == "llamacpp" else []),
         code(f"""# Fail fast: HF token + write access before loading a 14B model.
 import os
 
@@ -92,8 +102,8 @@ if __name__ == "__main__":
     ap.add_argument("commit")
     ap.add_argument("stage", choices=list(STAGES))
     ap.add_argument("--out")
-    ap.add_argument("--model", default="Qwen/Qwen3-14B-AWQ")
-    ap.add_argument("--engine", choices=["vllm", "hf"], default="vllm")
+    ap.add_argument("--model", default=TEACHER)
+    ap.add_argument("--engine", choices=["vllm", "hf", "llamacpp"], default="llamacpp")
     ap.add_argument("--vllm-spec", default="vllm", help='pip spec, e.g. "vllm==0.10.2"')
     a = ap.parse_args()
     out = a.out or f"notebooks/01_teacher_{a.stage}.ipynb"

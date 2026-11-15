@@ -58,9 +58,71 @@ class HFGenerator:
         return out
 
 
-def make_generator(engine: str, model: str, tp: int = 1, batch_size: int = 16):
+class LlamaCppGenerator:
+    """One llama-server per GPU (CUDA build), `parallel` slots each, requests spread over all slots.
+
+    vLLM 0.33 does not start on Kaggle's T4s (compute capability 7.5; probe v1/v2), so this is the GPU engine
+    there. `model` is "<hf repo>:<gguf file>" (e.g. "Qwen/Qwen3-14B-GGUF:Qwen3-14B-Q4_K_M.gguf") or a local
+    .gguf path; prompts are rendered with the original model's tokenizer (`tokenizer`) so they match training.
+    """
+
+    def __init__(self, model: str, tokenizer: str, llama_cpp: str = "llama.cpp", n_gpus: int | None = None,
+                 parallel: int = 8, ctx: int = 3072, ngl: int = 99):
+        import atexit
+        import os
+
+        from transformers import AutoTokenizer
+
+        from .llamacpp import Server
+
+        if not os.path.exists(model):  # "<repo>:<file>" on the Hub
+            from huggingface_hub import hf_hub_download
+
+            repo, fname = model.split(":", 1)
+            model = hf_hub_download(repo, fname)
+        if n_gpus is None:
+            import torch
+
+            n_gpus = max(1, torch.cuda.device_count())
+        self.tok = AutoTokenizer.from_pretrained(tokenizer)
+        self.servers = [Server(model, llama_cpp, ctx=ctx, ngl=ngl, parallel=parallel, gpu=g if ngl else None,
+                               log=f"llama-server-{g}.log").__enter__() for g in range(n_gpus)]
+        self.slots = parallel * n_gpus
+        atexit.register(self.close)  # never leave servers holding the GPUs
+
+    def close(self):
+        for s in self.servers:
+            if s.proc.poll() is None:
+                s.__exit__(None, None, None)
+
+    def generate(self, conversations, temperature, max_tokens, seed=0):
+        import time
+        from concurrent.futures import ThreadPoolExecutor
+
+        from .fmt import prompt_text
+
+        prompts = [prompt_text(self.tok, c) for c in conversations]
+        out, done, t0 = [""] * len(prompts), [0], time.time()
+
+        def one(i):
+            r = self.servers[i % len(self.servers)].complete(prompts[i], max_tokens, temperature, seed + i)
+            out[i] = r["text"]
+            done[0] += 1
+            if done[0] % 100 == 0:
+                print(f"generated {done[0]}/{len(prompts)} {(time.time() - t0) / 60:.1f} min", flush=True)
+
+        with ThreadPoolExecutor(self.slots) as pool:
+            list(pool.map(one, range(len(prompts))))
+        return out
+
+
+def make_generator(engine: str, model: str, tp: int = 1, batch_size: int = 16, tokenizer: str | None = None,
+                   llama_cpp: str = "llama.cpp"):
     if engine == "hf":
         return HFGenerator(model, batch_size=batch_size)
+    if engine == "llamacpp":
+        return LlamaCppGenerator(model, tokenizer or model.split(":", maxsplit=1)[0].removesuffix("-GGUF"), llama_cpp,
+                                 n_gpus=tp)
     return VLLMGenerator(model, tp)
 
 

@@ -49,21 +49,25 @@ def _free_port() -> int:
 class Server:
     """llama-server subprocess; context manager so it is always stopped."""
 
-    def __init__(self, gguf: str, llama_cpp: str, threads: int | None = None, ctx: int = 4096, ngl: int = 0):
+    def __init__(self, gguf: str, llama_cpp: str, threads: int | None = None, ctx: int = 4096, ngl: int = 0,
+                 parallel: int = 1, gpu: int | None = None, log: str | None = None):
+        """`ctx` is per slot; llama-server splits -c across --parallel slots, so it gets ctx * parallel."""
         self.port = _free_port()
-        cmd = [f"{llama_cpp}/build/bin/llama-server", "-m", gguf, "--port", str(self.port), "-c", str(ctx),
-               "-ngl", str(ngl), "--parallel", "1"]
+        cmd = [f"{llama_cpp}/build/bin/llama-server", "-m", gguf, "--port", str(self.port),
+               "-c", str(ctx * parallel), "-ngl", str(ngl), "--parallel", str(parallel)]
         if threads:
             cmd += ["-t", str(threads)]
-        self.cmd = cmd
+        self.cmd, self.log = cmd, log
+        self.env = {**os.environ, "CUDA_VISIBLE_DEVICES": str(gpu)} if gpu is not None else None
 
     def __enter__(self):
         import httpx
 
-        self.proc = subprocess.Popen(self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        out = open(self.log, "w") if self.log else subprocess.DEVNULL  # closed with the process
+        self.proc = subprocess.Popen(self.cmd, stdout=out, stderr=subprocess.STDOUT, env=self.env)
         self.url = f"http://127.0.0.1:{self.port}"
         t = time.time()
-        while time.time() - t < 300:
+        while time.time() - t < 900:
             try:
                 if httpx.get(f"{self.url}/health", timeout=2).status_code == 200:
                     self.load_s = time.time() - t
@@ -79,12 +83,13 @@ class Server:
         self.proc.terminate()
         self.proc.wait(timeout=30)
 
-    def complete(self, prompt: str, max_tokens: int = 700) -> dict:
+    def complete(self, prompt: str, max_tokens: int = 700, temperature: float = 0.0, seed: int = 0) -> dict:
         import httpx
 
         t = time.time()
-        r = httpx.post(f"{self.url}/completion", timeout=600, json={
-            "prompt": prompt, "n_predict": max_tokens, "temperature": 0, "stop": ["<|im_end|>"], "cache_prompt": False})
+        r = httpx.post(f"{self.url}/completion", timeout=1800, json={
+            "prompt": prompt, "n_predict": max_tokens, "temperature": temperature, "seed": seed,
+            "stop": ["<|im_end|>"], "cache_prompt": False})
         r.raise_for_status()
         j = r.json()
         tm = j.get("timings", {})
