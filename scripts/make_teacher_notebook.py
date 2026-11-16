@@ -68,7 +68,7 @@ import subprocess, sys
 def run(extra, data):
     for d in ("data", data):
         os.makedirs(d, exist_ok=True)
-    for name in {st["needs"]!r}:
+    for name in {st["needs"]!r} if data != "data" else []:  # the full run reads data/ in place
         shutil.copy(f"data/{{name}}", f"{{data}}/{{name}}")
     cmd = (f"{{sys.executable}} -m distill.teacher {{STAGE}} --model {{MODEL}} --tp {{TP}} --engine {{ENGINE}} "
            f"--data {{data}} {{extra}}")
