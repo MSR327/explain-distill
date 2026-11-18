@@ -34,6 +34,40 @@
         "no_json": 1
       },
       "coverage": 1.0
+    },
+    "base-1.7B": {
+      "n": 360,
+      "valid_json": 0.7777777777777778,
+      "strict_pass": 0.07222222222222222,
+      "citation_precision": 0.36186046511627906,
+      "missing_skill_precision": 0.9628378378378378,
+      "matched_skills_f1": 0.4769945238725081,
+      "missing_skills_f1": 0.42722818685711667,
+      "fail_reasons": {
+        "quote_not_in_posting": 221,
+        "missing_keys": 80,
+        "quote_length": 74,
+        "missing_skill_in_resume": 72,
+        "n_evidence": 13
+      },
+      "coverage": 1.0
+    },
+    "qwen3-1.7b-explain": {
+      "n": 360,
+      "valid_json": 0.9916666666666667,
+      "strict_pass": 0.5305555555555556,
+      "citation_precision": 0.9490595611285266,
+      "missing_skill_precision": 0.9784704370179949,
+      "matched_skills_f1": 0.6212117563978219,
+      "missing_skills_f1": 0.4637173607436233,
+      "fail_reasons": {
+        "quote_length": 97,
+        "quote_not_in_posting": 53,
+        "missing_skill_in_resume": 51,
+        "missing_keys": 3,
+        "n_evidence": 1
+      },
+      "coverage": 1.0
     }
   },
   "paired_strict_pass_ci95": {
@@ -41,6 +75,16 @@
       0.3055555555555556,
       0.24166666666666667,
       0.36944444444444446
+    ],
+    "base-1.7B - base-0.6B": [
+      -0.125,
+      -0.175,
+      -0.075
+    ],
+    "qwen3-1.7b-explain - base-0.6B": [
+      0.3333333333333333,
+      0.26944444444444443,
+      0.3972222222222222
     ]
   },
   "n_common": 360

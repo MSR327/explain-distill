@@ -32,6 +32,38 @@
       },
       "coverage": 0.16666666666666666
     },
+    "base-1.7B": {
+      "n": 60,
+      "valid_json": 0.8333333333333334,
+      "strict_pass": 0.05,
+      "citation_precision": 0.328125,
+      "missing_skill_precision": 0.967984934086629,
+      "matched_skills_f1": 0.494491196099652,
+      "missing_skills_f1": 0.5242079809827194,
+      "fail_reasons": {
+        "quote_not_in_posting": 42,
+        "quote_length": 12,
+        "missing_keys": 10,
+        "missing_skill_in_resume": 10,
+        "n_evidence": 1
+      },
+      "coverage": 0.16666666666666666
+    },
+    "qwen3-1.7b-explain": {
+      "n": 60,
+      "valid_json": 1.0,
+      "strict_pass": 0.5666666666666667,
+      "citation_precision": 0.9532710280373832,
+      "missing_skill_precision": 0.9775967413441955,
+      "matched_skills_f1": 0.6802754179066023,
+      "missing_skills_f1": 0.4964647287748972,
+      "fail_reasons": {
+        "quote_length": 11,
+        "missing_skill_in_resume": 10,
+        "quote_not_in_posting": 9
+      },
+      "coverage": 0.16666666666666666
+    },
     "groq-gpt-oss-120b": {
       "n": 60,
       "valid_json": 1.0,
@@ -53,6 +85,16 @@
       0.2,
       0.03333333333333333,
       0.35
+    ],
+    "base-1.7B - base-0.6B": [
+      -0.23333333333333334,
+      -0.35,
+      -0.11666666666666667
+    ],
+    "qwen3-1.7b-explain - base-0.6B": [
+      0.2833333333333333,
+      0.11666666666666667,
+      0.45
     ],
     "groq-gpt-oss-120b - base-0.6B": [
       0.3333333333333333,
