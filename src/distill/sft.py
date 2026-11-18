@@ -93,7 +93,9 @@ def main() -> None:
         output_dir=a.out, num_train_epochs=a.epochs, max_steps=a.max_steps, learning_rate=a.lr,
         lr_scheduler_type="cosine", warmup_steps=10, per_device_train_batch_size=a.batch,
         gradient_accumulation_steps=a.grad_accum, per_device_eval_batch_size=a.batch, eval_strategy="epoch",
-        max_length=a.max_length, fp16=gpu, bf16=False, gradient_checkpointing=True, logging_steps=10,
+        max_length=a.max_length, fp16=gpu, bf16=False, gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},  # reentrant + DDP + LoRA: 'mark variable ready twice'
+        logging_steps=10,
         save_strategy="no", report_to="none", optim="paged_adamw_8bit" if quant else "adamw_torch",
         ddp_find_unused_parameters=False if gpu else None, use_cpu=not gpu, seed=0)  # no silent MPS on a Mac
     trainer = SFTTrainer(model=model, args=args, train_dataset=train, eval_dataset=ev, processing_class=tok,

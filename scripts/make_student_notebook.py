@@ -31,6 +31,8 @@ def build(commit: str, size: str, epochs: float = 2.0) -> dict:
            f"to the private dataset repo `{DATA_REPO}`."),
         code(f'%pip install -q "trl==1.18.0" "peft==0.21.3" "bitsandbytes" "datasets" '
              f'"distill @ git+https://github.com/MSR327/explain-distill.git@{commit}"\n'
+             # Kaggle ships torchao 0.10; PEFT 0.21 raises on torchao < 0.16 when merging fp16 LoRA (v2 smoke).
+             f'%pip uninstall -y -q torchao\n'
              f'COMMIT, BASE, NAME, EPOCHS = "{commit}", "{base}", "{name}", {epochs}'),
         code(f"""import os, shutil, subprocess, sys, json, time
 
@@ -70,7 +72,7 @@ def stage(name, cmd, marker):
         return False
 
 G = f"CUDA_VISIBLE_DEVICES=0 {sys.executable} -m distill.generate --engine hf --limit 4 --max-tokens 64"
-trained = stage("train", f"CUDA_VISIBLE_DEVICES=0 {sys.executable} -m distill.sft --model {BASE} --out smoke "
+trained = stage("train", f"torchrun --nproc_per_node 2 -m distill.sft --model {BASE} --out smoke "
                          f"--max-steps 3 --limit 16", "TRAINED")
 stage("generate-base", f"{G} --model {BASE} --system smoke-base --out smoke/gen_base.jsonl", "GENERATED")
 if trained:
