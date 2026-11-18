@@ -52,3 +52,33 @@ def check(text: str, resume: str, posting: str) -> tuple[list[str], str | None]:
               "missing_skills": [s.strip() for s in missing],
               "evidence": [{"claim": e["claim"].strip(), "quote": e["quote"].strip()} for e in evidence]}
     return [], json.dumps(target, ensure_ascii=False)
+
+
+def repair(text: str, resume: str, posting: str) -> str | None:
+    """Salvage an output that failed `check` only on some evidence items or skills (else None).
+
+    Drops evidence items whose quote is the wrong length or not found in the posting, keeps the first 4 verified
+    ones, and removes "missing" skills the resume has. Returns the repaired JSON text, which the caller must
+    still pass through `check`. The 14B teacher paraphrases a quote or two in most answers; rejecting the whole
+    answer threw away 74% of them and skewed the data toward unrelated job pairs (strict pass rate by pair kind:
+    source 12%, near 23%, far 44%).
+    """
+    try:
+        obj = parse_json(text)
+    except ValueError:
+        return None
+    if any(k not in obj for k in KEYS) or not (isinstance(obj["fit_summary"], str) and obj["fit_summary"].strip()):
+        return None
+    matched, missing, evidence = obj["matched_skills"], obj["missing_skills"], obj["evidence"]
+    if not all(isinstance(x, list) and all(isinstance(s, str) for s in x) for x in (matched, missing)):
+        return None
+    if not isinstance(evidence, list):
+        return None
+    good = [e for e in evidence
+            if isinstance(e, dict) and isinstance(e.get("quote"), str) and isinstance(e.get("claim"), str)
+            and 5 <= len(e["quote"].split()) <= 25 and check_citations([e], posting)][:4]
+    if len(good) < 2:
+        return None
+    resume_words = _norm_words(resume)
+    missing = [s for s in missing if not (s.strip() and _norm_words(s) in resume_words)]
+    return json.dumps({**obj, "missing_skills": missing, "evidence": good}, ensure_ascii=False)

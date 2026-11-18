@@ -57,7 +57,24 @@ def test_run_filter_routes_by_split_and_counts_reasons():
                {"resume_job_id": "r1", "job_id": "j2", "text": "oops"}]
     stats, train, ev = run_filter(pairs, teacher, {"r1": "python dev"}, {"j1": POSTING, "j2": POSTING})
     assert stats["kept"] == 1 and stats["reasons"] == {"no_json": 1} and ev == []
-    assert train[0]["messages"][-1]["role"] == "assistant" and stats["by_kind"]["far"] == {"kept": 0, "total": 1}
+    assert train[0]["messages"][-1]["role"] == "assistant"
+    assert stats["by_kind"]["far"] == {"kept": 0, "kept_strict": 0, "total": 1}
+    assert stats["kept_strict"] == 1 and stats["kept_repaired"] == 0 and train[0]["repaired"] is False
+
+
+def test_run_filter_repairs_partially_bad_answers_unless_disabled():
+    msgs = [{"role": "user", "content": "u"}]
+    pairs = [{"resume_job_id": "r1", "job_id": "j1", "kind": "source", "split": "train", "messages": msgs}]
+    partly_bad = json.dumps({"fit_summary": "fit", "matched_skills": [], "missing_skills": ["Kafka"], "evidence": [
+        {"claim": "a", "quote": "Build streaming data pipelines with Apache Kafka"},
+        {"claim": "b", "quote": "Deploy services on Kubernetes in production"},
+        {"claim": "c", "quote": "requires a PhD in astrophysics and five years of telescope work"}]})
+    teacher = [{"resume_job_id": "r1", "job_id": "j1", "text": partly_bad}]
+    args = (pairs, teacher, {"r1": "python dev"}, {"j1": POSTING})
+    stats, train, _ = run_filter(*args)
+    assert (stats["kept"], stats["kept_strict"], stats["kept_repaired"]) == (1, 0, 1) and train[0]["repaired"]
+    assert len(json.loads(train[0]["messages"][-1]["content"])["evidence"]) == 2
+    assert run_filter(*args, do_repair=False)[0]["kept"] == 0 and stats["reasons"] == {"quote_not_in_posting": 1}
 
 
 def test_importing_distill_keeps_jax_off_the_gpu():

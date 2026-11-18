@@ -1,6 +1,6 @@
 import json
 
-from distill.filter import check
+from distill.filter import check, repair
 
 POSTING = ("We need an engineer who can build streaming data pipelines with Apache Kafka and Spark. "
            "Experience deploying services on Kubernetes in production is required. Python is a must.")
@@ -41,3 +41,15 @@ def test_rejects_bad_shapes():
     assert check(good(evidence=one), RESUME, POSTING)[0] == ["n_evidence"]
     short = [{"claim": "a", "quote": "Python is a must"}, *one]
     assert "quote_length" in check(good(evidence=short), RESUME, POSTING)[0]
+
+
+def test_repair_drops_bad_quotes_and_contradicted_skills_but_needs_two_verified():
+    bad = {"claim": "x", "quote": "must have ten years of Rust and Haskell experience"}
+    k8s = {"claim": "k8s", "quote": "Experience deploying services on Kubernetes in production"}
+    stream = {"claim": "stream", "quote": "build streaming data pipelines with Apache Kafka and Spark"}
+    fixed = repair(good(evidence=[bad, k8s, stream], missing_skills=["Kafka", "Airflow"]), RESUME, POSTING)
+    reasons, target = check(fixed, RESUME, POSTING)
+    assert reasons == [] and [e["claim"] for e in json.loads(target)["evidence"]] == ["k8s", "stream"]
+    assert json.loads(target)["missing_skills"] == ["Kafka"]  # Airflow is on the resume
+    assert repair(good(evidence=[bad, k8s]), RESUME, POSTING) is None  # only one verified quote left
+    assert repair("no json here", RESUME, POSTING) is None

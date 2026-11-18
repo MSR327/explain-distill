@@ -118,25 +118,37 @@ def make_pairs(index, resumes: list[dict], embed, extract, tau: float, alpha: di
     return out
 
 
-def run_filter(pairs: list[dict], teacher: list[dict], resumes: dict, postings: dict) -> tuple[dict, list, list]:
-    """Rejection sampling with project 2's checks; returns stats and SFT rows for train/eval."""
+def run_filter(pairs: list[dict], teacher: list[dict], resumes: dict, postings: dict,
+               do_repair: bool = True) -> tuple[dict, list, list]:
+    """Rejection sampling with project 2's checks (plus `repair`); returns stats and SFT rows for train/eval.
+
+    `kept_strict` is the share of teacher answers that pass untouched (a measure of the teacher); `kept` also
+    counts answers salvaged by dropping their unverifiable evidence items.
+    """
     out = {p["resume_job_id"] + "|" + p["job_id"]: p for p in pairs}
-    stats = {"total": 0, "kept": 0, "reasons": collections.Counter(),
-             "by_kind": collections.defaultdict(lambda: [0, 0])}
+    stats = {"total": 0, "kept": 0, "kept_strict": 0, "kept_repaired": 0, "reasons": collections.Counter(),
+             "by_kind": collections.defaultdict(lambda: [0, 0, 0])}
     rows = {"train": [], "eval": []}
     for t in teacher:
         p = out[t["resume_job_id"] + "|" + t["job_id"]]
-        reasons, target = quality.check(t["text"], resumes[p["resume_job_id"]], postings[p["job_id"]])
+        resume, posting = resumes[p["resume_job_id"]], postings[p["job_id"]]
+        reasons, target = quality.check(t["text"], resume, posting)
         stats["total"] += 1
-        stats["by_kind"][p["kind"]][1] += 1
+        stats["by_kind"][p["kind"]][2] += 1
         stats["reasons"].update(reasons)
+        repaired = False
+        if not target and do_repair and (fixed := quality.repair(t["text"], resume, posting)):
+            target, repaired = quality.check(fixed, resume, posting)[1], True
         if target:
             stats["kept"] += 1
+            stats["kept_repaired" if repaired else "kept_strict"] += 1
             stats["by_kind"][p["kind"]][0] += 1
+            stats["by_kind"][p["kind"]][1] += not repaired
             rows[p["split"]].append({"messages": [*p["messages"], {"role": "assistant", "content": target}],
-                                     "resume_job_id": p["resume_job_id"], "job_id": p["job_id"], "kind": p["kind"]})
+                                     "resume_job_id": p["resume_job_id"], "job_id": p["job_id"], "kind": p["kind"],
+                                     "repaired": repaired})
     stats["reasons"] = dict(stats["reasons"].most_common())
-    stats["by_kind"] = {k: {"kept": a, "total": b} for k, (a, b) in stats["by_kind"].items()}
+    stats["by_kind"] = {k: {"kept": a, "kept_strict": b, "total": c} for k, (a, b, c) in stats["by_kind"].items()}
     return stats, rows["train"], rows["eval"]
 
 
@@ -154,6 +166,7 @@ def main() -> None:
     ap.add_argument("--n-eval", type=int, default=120)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--data", default=str(DATA))
+    ap.add_argument("--no-repair", action="store_true", help="filter stage: reject instead of salvaging answers")
     a = ap.parse_args()
     data = Path(a.data)
 
@@ -193,7 +206,8 @@ def main() -> None:
         index = load_index()
         postings = dict(zip(index.jobs["job_id"].astype(str), index.jobs["description"], strict=True))
         resumes = {r["job_id"]: r["resume"] for r in _read(data / "resumes.jsonl")}
-        stats, train, ev = run_filter(_read(data / "pairs.jsonl"), _read(data / "teacher.jsonl"), resumes, postings)
+        stats, train, ev = run_filter(_read(data / "pairs.jsonl"), _read(data / "teacher.jsonl"), resumes, postings,
+                                    do_repair=not a.no_repair)
         _write(data / "sft_train.jsonl", train)
         _write(data / "sft_eval.jsonl", ev)
         (data / "filter_stats.json").write_text(json.dumps(stats, indent=2))
