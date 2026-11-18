@@ -35,6 +35,25 @@ def build_dataset(tok, rows: list[dict], max_length: int):
                                      "mean_tokens": sum(lens) / max(1, len(lens))}
 
 
+def fix_dtypes(model) -> dict:
+    """Make the parameters safe for fp16 mixed precision (T4 has no bf16) and return a dtype census.
+
+    Qwen3 ships in bf16. torch's fp16 GradScaler cannot unscale bf16 gradients ("_amp_foreach_non_finite_check_and_
+    unscale_cuda not implemented for 'BFloat16'": explain-distill student run v1), so trainable bf16 parameters
+    become fp32 and frozen bf16 ones fp16. Quantized (uint8) weights are left alone.
+    """
+    import collections
+
+    import torch
+
+    census = collections.Counter()
+    for p in model.parameters():
+        census[f"{str(p.dtype).removeprefix('torch.')}{'/train' if p.requires_grad else ''}"] += 1
+        if p.dtype == torch.bfloat16:
+            p.data = p.data.to(torch.float32 if p.requires_grad else torch.float16)
+    return dict(census)
+
+
 def main() -> None:
     import torch
     from peft import LoraConfig
@@ -79,6 +98,9 @@ def main() -> None:
         ddp_find_unused_parameters=False if gpu else None, use_cpu=not gpu, seed=0)  # no silent MPS on a Mac
     trainer = SFTTrainer(model=model, args=args, train_dataset=train, eval_dataset=ev, processing_class=tok,
                          peft_config=LoraConfig(task_type="CAUSAL_LM", **LORA))
+    census = fix_dtypes(trainer.model)
+    if local_rank == 0:
+        print("DTYPES", json.dumps(census), flush=True)
     result = trainer.train()
     if local_rank == 0:
         trainer.model.save_pretrained(f"{a.out}/adapter")

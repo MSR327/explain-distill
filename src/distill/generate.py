@@ -28,6 +28,7 @@ def main() -> None:
     ap.add_argument("--llama-cpp", default="llama.cpp")
     ap.add_argument("--batch-size", type=int, default=16)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--max-tokens", type=int, default=700)
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     pairs = [p for p in map(json.loads, Path(a.pairs).read_text().splitlines()) if p["split"] == a.split][: a.limit]
@@ -36,7 +37,7 @@ def main() -> None:
                          llama_cpp=a.llama_cpp)
     load_s = time.time() - t
     t = time.time()
-    texts = gen.generate([p["messages"] for p in pairs], temperature=0.0, max_tokens=700)
+    texts = gen.generate([p["messages"] for p in pairs], temperature=0.0, max_tokens=a.max_tokens)
     gen_s = time.time() - t
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text("".join(json.dumps({"system": a.system, "resume_job_id": p["resume_job_id"],

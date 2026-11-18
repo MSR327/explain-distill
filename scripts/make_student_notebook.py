@@ -3,8 +3,8 @@
     python scripts/make_student_notebook.py <commit> 0.6B|1.7B|4B [--epochs 2] [--out PATH]
 
 Every heavy step is a subprocess, so nothing loaded in the kernel holds GPU memory between steps. Eval
-generation uses Transformers (vLLM 0.33 does not start on Kaggle's T4s; see probe v2). A 3-step smoke run on
-one GPU must succeed before the full two-GPU run starts.
+generation uses Transformers (vLLM 0.33 does not start on Kaggle's T4s; see probe v2). A tiny smoke test on
+one GPU (train, generate, merge, generate) must pass before the full two-GPU run starts.
 """
 
 import argparse
@@ -56,9 +56,32 @@ def sh(cmd, marker):
         print(p.stdout[-2000:], p.stderr[-6000:])
         raise RuntimeError(cmd)
     return lines"""),
-        code("""# Smoke: 3 steps on one GPU (catches fp16/NaN/OOM/format problems in minutes).
-sh(f"CUDA_VISIBLE_DEVICES=0 {sys.executable} -m distill.sft --model {BASE} --out smoke --max-steps 3 --limit 16",
-   "TRAINED")"""),
+        code("""# Smoke test on ONE GPU, tiny. Every stage runs even if another fails, so one read of this log shows ALL
+# problems (bf16/fp16, 4-bit loading, merge, fp16 generation) instead of one per round trip.
+smoke_failures = []
+def stage(name, cmd, marker):
+    try:
+        sh(cmd, marker)
+        print("SMOKE OK:", name, flush=True)
+        return True
+    except Exception as e:
+        smoke_failures.append(name)
+        print("SMOKE FAILED:", name, "->", str(e)[:300], flush=True)
+        return False
+
+G = f"CUDA_VISIBLE_DEVICES=0 {sys.executable} -m distill.generate --engine hf --limit 4 --max-tokens 64"
+trained = stage("train", f"CUDA_VISIBLE_DEVICES=0 {sys.executable} -m distill.sft --model {BASE} --out smoke "
+                         f"--max-steps 3 --limit 16", "TRAINED")
+stage("generate-base", f"{G} --model {BASE} --system smoke-base --out smoke/gen_base.jsonl", "GENERATED")
+if trained:
+    merged = stage("merge", f"{sys.executable} -c \\"from distill.sft import merge; "
+                            f"merge('{BASE}', 'smoke/adapter', 'smoke/merged'); print('MERGED')\\"", "MERGED")
+    if merged:
+        stage("generate-merged", f"{G} --model smoke/merged --system smoke-merged --out smoke/gen_merged.jsonl",
+              "GENERATED")
+if smoke_failures:
+    raise RuntimeError(f"smoke failed: {smoke_failures}")
+print("ALL SMOKE STAGES PASSED")"""),
         code("""t = time.time()
 sh(f"torchrun --nproc_per_node 2 -m distill.sft --model {BASE} --out out --epochs {EPOCHS}", "TRAINED")
 print(f"train {(time.time() - t) / 60:.1f} min")
