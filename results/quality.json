@@ -1,0 +1,47 @@
+{
+  "systems": {
+    "base-0.6B": {
+      "n": 360,
+      "valid_json": 0.9583333333333334,
+      "strict_pass": 0.19722222222222222,
+      "citation_precision": 0.7556427870461236,
+      "missing_skill_precision": 0.9637426900584796,
+      "matched_skills_f1": 0.37583413879927746,
+      "missing_skills_f1": 0.3319355179245015,
+      "fail_reasons": {
+        "quote_not_in_posting": 136,
+        "quote_length": 120,
+        "n_evidence": 100,
+        "missing_skill_in_resume": 62,
+        "missing_keys": 15
+      },
+      "coverage": 1.0
+    },
+    "qwen3-0.6b-explain": {
+      "n": 360,
+      "valid_json": 0.9888888888888889,
+      "strict_pass": 0.5027777777777778,
+      "citation_precision": 0.9383445945945946,
+      "missing_skill_precision": 0.9735040190532896,
+      "matched_skills_f1": 0.5834573868587063,
+      "missing_skills_f1": 0.4430501299332039,
+      "fail_reasons": {
+        "quote_length": 88,
+        "missing_skill_in_resume": 67,
+        "quote_not_in_posting": 59,
+        "missing_keys": 2,
+        "bad_types": 1,
+        "no_json": 1
+      },
+      "coverage": 1.0
+    }
+  },
+  "paired_strict_pass_ci95": {
+    "qwen3-0.6b-explain - base-0.6B": [
+      0.3055555555555556,
+      0.24166666666666667,
+      0.36944444444444446
+    ]
+  },
+  "n_common": 360
+}
