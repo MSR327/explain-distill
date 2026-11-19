@@ -4,11 +4,11 @@ Distill the grounded job-match explanations of [resume-job-matcher](https://gith
 into small open LLMs (Qwen3 0.6B / 1.7B / 4B), then benchmark how to serve them on free hardware.
 
 **Headline (360 held-out resume–job pairs):** QLoRA distillation lifts Qwen3-0.6B from **19.7% → 50.3%** strict
-pass (paired +30.6 pts, 95% CI 24.2–36.9) and quote precision from 75.6% → 93.8%. On a 60-pair subset the 1.7B
-student reaches **92% of gpt-oss-120b's** strict-pass rate at ~1/70 of the total parameters (gpt-oss is a MoE
-with ~5B active), and both students beat it on missing-skills F1. Everything ran on free tiers (Kaggle 2×T4, Groq free API).
+pass (paired +30.6 pts, 95% CI 24.2–36.9) and quote precision from 75.6% → 93.8%. On a 60-pair subset the 4B
+student **matches gpt-oss-120b** (65.0% vs 61.7% strict pass; paired diff +3.3 pts, CI −13 to +20) at 1/30 of the
+total parameters (gpt-oss is a MoE with ~5B active), and every student beats it on missing-skills F1. Everything ran on free tiers (Kaggle 2×T4, Groq free API).
 
-**Status:** 0.6B and 1.7B students done; 4B training; serving benchmark and CPU deployment next.
+**Status:** all three students trained and scored; serving benchmark and CPU deployment next.
 Design: [docs/design.md](docs/design.md).
 
 Part of a three-project series:
@@ -28,9 +28,10 @@ actually contains. Greedy decoding, same prompts for all systems.
 |---|---|---|---|---|---|
 | Qwen3-0.6B (base) | 19.7% | 75.6% | 95.8% | 0.38 | 0.33 |
 | Qwen3-1.7B (base) | 7.2% | 36.2% | 77.8% | 0.48 | 0.43 |
+| Qwen3-4B (base) | 19.2% | 51.0% | 100% | 0.58 | 0.47 |
 | **0.6B student** | **50.3%** | 93.8% | 98.9% | 0.58 | 0.44 |
 | **1.7B student** | **53.1%** | 94.9% | 99.2% | 0.62 | 0.46 |
-| 4B student | *training* | | | | |
+| **4B student** | **55.8%** | 95.1% | 99.4% | 0.70 | 0.51 |
 
 **60-pair subset with a large-model reference** (20 per kind, fixed seed; Groq's free tier allows ~200k
 tokens/day, so the 120B model is scored on a stratified subset and all systems are compared on the same pairs):
@@ -39,15 +40,20 @@ tokens/day, so the 120B model is scored on a stratified subset and all systems a
 |---|---|---|---|---|
 | Qwen3-0.6B (base) | 0.6B | 28.3% | 84.0% | 0.40 |
 | 0.6B student | 0.6B | 48.3% | 93.5% | **0.51** |
-| 1.7B student | 1.7B | 56.7% | **95.3%** | 0.50 |
-| gpt-oss-120b (Groq, production explainer) | 120B | **61.7%** | 94.2% | 0.38 |
+| 1.7B student | 1.7B | 56.7% | 95.3% | 0.50 |
+| 4B student | 4B | **65.0%** | **97.0%** | **0.59** |
+| gpt-oss-120b (Groq, production explainer) | 120B | 61.7% | 94.2% | 0.38 |
 
 Findings:
-- **Distillation, not size, buys rule-following.** The base 1.7B is *worse* than the base 0.6B: it paraphrases
-  quotes (36% verbatim) and writes `// comments` inside its JSON. After fine-tuning both follow the format.
-- **0.6B is enough.** 1.7B − 0.6B student = +2.8 pts strict pass, 95% CI −3.6 to +8.9 (paired bootstrap): not
-  distinguishable on 360 pairs, so the 3× smaller model is the deployment pick.
-- **The remaining errors are quote length** (quotes just outside 5–25 words: 88/360 for 0.6B) — a data issue, not
+- **Distillation, not size, buys rule-following.** Base models do not get better with size (19.7% / 7.2% /
+  19.2% strict pass for 0.6B / 1.7B / 4B): the 1.7B paraphrases quotes (36% verbatim) and writes `// comments`
+  inside its JSON. After fine-tuning all three follow the format (50–56%).
+- **Returns flatten with size.** Strict pass 50.3% → 53.1% → 55.8%. Paired differences: 1.7B − 0.6B = +2.8 pts
+  (CI −3.6 to +8.9), 4B − 0.6B = +5.6 pts (CI −0.8 to +11.7). The 4B is better on skill F1 (0.70 vs 0.58), but
+  the 0.6B is ~7× smaller and the CPU-deployment pick; the 4B is the pick when a GPU is available.
+- **A 4B student matches the 120B production model** on the 60-pair subset; the small subset makes the interval
+  wide, so the honest claim is "no detectable gap", not "better".
+- **The remaining errors are quote length** (quotes just outside 5–25 words: 88/360 for 0.6B, 93/360 for 4B) — a data issue, not
   a capacity one: the 14B teacher paraphrased often, and only 26% of its outputs passed strictly (see below).
 
 ## Pipeline
