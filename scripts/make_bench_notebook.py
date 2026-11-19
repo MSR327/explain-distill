@@ -29,15 +29,26 @@ def code(s):
             "source": s.splitlines(keepends=True)}
 
 
+# Requests per row, scaled so each notebook is ~1 GPU hour: a 4B request on 4 CPU threads takes ~3 min.
+# gpu_n: prompts in the 8-slot throughput pass (also the quality sample per GGUF); lat: sequential latency
+# requests; cpu_n: CPU-only requests per quant.
+SIZES = {"0.6B": {"gpu_n": 360, "lat": 30, "cpu_n": 20}, "1.7B": {"gpu_n": 240, "lat": 30, "cpu_n": 10},
+         "4B": {"gpu_n": 120, "lat": 20, "cpu_n": 5}}
+
+
 def build(commit: str, size: str) -> dict:
     name = f"qwen3-{size.lower()}-explain"
+    n = SIZES[size]
     cells = [
         md(f"# Serving benchmark: {name}\n\nTransformers fp16 / NF4 baselines; GGUF f16 / Q8_0 / Q4_K_M on "
            "llama.cpp CUDA (T4) and Q8_0 / Q4_K_M on llama.cpp CPU (4 threads). Needs GPU T4 x2, Internet, "
            "secret `hg`."),
         code(f'%pip install -q "bitsandbytes" "datasets" '
              f'"distill @ git+https://github.com/MSR327/explain-distill.git@{commit}"\n'
-             f'COMMIT, NAME, SIZE = "{commit}", "{name}", "{size}"'),
+             # Kaggle's torchao 0.10 breaks PEFT/Transformers quantization checks (student v2); unused here.
+             f'%pip uninstall -y -q torchao\n'
+             f'COMMIT, NAME, SIZE = "{commit}", "{name}", "{size}"\n'
+             f'GPU_N, LAT, CPU_N = {n["gpu_n"]}, {n["lat"]}, {n["cpu_n"]}'),
         code(f"""import os, shutil, subprocess, sys, json, glob
 
 from huggingface_hub import HfApi, hf_hub_download, snapshot_download
@@ -70,24 +81,25 @@ def upload(system):
         code(build_llama_cpp_cuda("llama-server llama-quantize")),
         code("""# Transformers baselines, one request at a time on GPU 0.
 for tag, extra in (("hf-fp16", ""), ("hf-nf4", "--load-4bit")):
-    sh(f"CUDA_VISIBLE_DEVICES=0 {sys.executable} -m distill.bench_hf --model {MERGED} --n 30 {extra} "
+    sh(f"CUDA_VISIBLE_DEVICES=0 {sys.executable} -m distill.bench_hf --model {MERGED} --n {LAT} {extra} "
        f"--system {NAME}-{tag} --out outputs/{NAME}-{tag}.jsonl", "BENCH")
     upload(f"{NAME}-{tag}")"""),
-        code("""%pip install -q ./llama.cpp/gguf-py sentencepiece
+        code("""# convert_hf_to_gguf.py imports the gguf-py folder next to it; pip-installing gguf-py would upgrade
+# numpy (it needs >= 2.2.6) under the running session, so it is deliberately not installed (checked locally).
 sh(f"{sys.executable} -m distill.llamacpp convert --merged {MERGED} --llama-cpp llama.cpp --out gguf", "GGUF")
 print(*[f"{f} {os.path.getsize(f) / 1e9:.2f} GB" for f in sorted(glob.glob("gguf/*.gguf"))], sep="\\n")"""),
         code("""# llama.cpp CUDA, one T4: 30 sequential requests (latency), then all eval prompts on 8 slots.
 for q in ("f16", "Q8_0", "Q4_K_M"):
     system = f"{NAME}-llamacpp-cuda-{q}"
     sh(f"{sys.executable} -m distill.llamacpp bench --gguf gguf/model-{q}.gguf --llama-cpp llama.cpp "
-       f"--tokenizer {MERGED} --gpu 0 --ngl 99 --parallel 8 --n-latency 30 --system {system} "
+       f"--tokenizer {MERGED} --gpu 0 --ngl 99 --parallel 8 --n {GPU_N} --n-latency {LAT} --system {system} "
        f"--out outputs/{system}.jsonl", "BENCH")
     upload(system)"""),
         code("""# llama.cpp CPU only (GPUs hidden: a CUDA build offloads prompt matmuls), 4 threads, 20 requests.
 for q in ("Q8_0", "Q4_K_M"):
     system = f"{NAME}-llamacpp-cpu-{q}"
     sh(f"{sys.executable} -m distill.llamacpp bench --gguf gguf/model-{q}.gguf --llama-cpp llama.cpp "
-       f"--tokenizer {MERGED} --gpu none --ngl 0 --threads 4 --n 20 --system {system} "
+       f"--tokenizer {MERGED} --gpu none --ngl 0 --threads 4 --n {CPU_N} --system {system} "
        f"--out outputs/{system}.jsonl", "BENCH")
     upload(system)
 for q in ("Q8_0", "Q4_K_M"):
