@@ -8,7 +8,7 @@ pass (paired +30.6 pts, 95% CI 24.2–36.9) and quote precision from 75.6% → 9
 student **matches gpt-oss-120b** (65.0% vs 61.7% strict pass; paired diff +3.3 pts, CI −13 to +20) at 1/30 of the
 total parameters (gpt-oss is a MoE with ~5B active), and every student beats it on missing-skills F1. Everything ran on free tiers (Kaggle 2×T4, Groq free API).
 
-**Status:** three students trained and scored, serving benchmark done; CPU Space deployment next.
+**Status:** complete. Three students trained and scored, serving benchmark done, 0.6B student public on Hugging Face.
 Design: [docs/design.md](docs/design.md).
 
 Part of a three-project series:
@@ -96,6 +96,21 @@ Findings:
 - **CPU-only is usable but slow:** ~25 s per explanation for the 0.6B Q4_K_M on 4 cores (prompt processing at
   ~150 tok/s is ~10 s of it). A free 2-vCPU Hugging Face Space will be slower still, so in the app the student is
   the *unlimited fallback* behind Groq (~2 s), not the primary. The 4B is not viable on CPU (~100 s).
+
+## Use it
+
+The 0.6B student is public: [srish327/qwen3-0.6b-explain](https://huggingface.co/srish327/qwen3-0.6b-explain)
+(Q4_K_M / Q8_0 GGUF, merged fp16, LoRA adapter, model card).
+
+```bash
+hf download srish327/qwen3-0.6b-explain gguf/qwen3-0.6b-explain-Q4_K_M.gguf --local-dir .
+llama-server -m gguf/qwen3-0.6b-explain-Q4_K_M.gguf --jinja -c 4096 --port 8080
+```
+
+resume-job-matcher already speaks to it: set `STUDENT_URL` (and optionally `STUDENT_API_KEY`) and the app uses
+the student as the fallback explainer when Groq fails or runs out of free quota (`FallbackLLM`, Groq first).
+It is not hosted: Hugging Face now requires a paid plan for Docker Spaces, so `space/` is kept as a ready
+Docker recipe (llama.cpp built from the pinned commit, model downloaded at start) for any Docker host.
 
 ## Pipeline
 

@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir "huggingface_hub>=0.34" && useradd -m -u 1000 use
 COPY --from=build /src/build/bin/llama-server /usr/local/bin/llama-server
 COPY start.sh /start.sh
 USER user
-ENV HOME=/home/user MODEL_REPO=srish327/qwen3-1.7b-explain MODEL_FILE=gguf/qwen3-1.7b-explain-Q4_K_M.gguf
+# 0.6B Q4_K_M: same strict pass as f16 (-0.6 pts) at 0.40 GB; ~25 s per explanation on 4 CPU cores.
+ENV HOME=/home/user MODEL_REPO=srish327/qwen3-0.6b-explain MODEL_FILE=gguf/qwen3-0.6b-explain-Q4_K_M.gguf
 EXPOSE 7860
 CMD ["sh", "/start.sh"]
