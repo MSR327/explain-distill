@@ -1,0 +1,64 @@
+{
+  "systems": {
+    "qwen3-4b-explain-llamacpp-cuda-f16": {
+      "n": 120,
+      "valid_json": 0.9916666666666667,
+      "strict_pass": 0.5666666666666667,
+      "citation_precision": 0.9611231101511879,
+      "missing_skill_precision": 0.9797775530839231,
+      "matched_skills_f1": 0.7098907610098573,
+      "missing_skills_f1": 0.4932425595823687,
+      "fail_reasons": {
+        "quote_length": 28,
+        "missing_skill_in_resume": 16,
+        "quote_not_in_posting": 15,
+        "missing_keys": 1
+      },
+      "coverage": 0.3333333333333333
+    },
+    "qwen3-4b-explain-llamacpp-cuda-Q8_0": {
+      "n": 120,
+      "valid_json": 0.9916666666666667,
+      "strict_pass": 0.55,
+      "citation_precision": 0.9546436285097192,
+      "missing_skill_precision": 0.9795121951219512,
+      "matched_skills_f1": 0.7028921908647554,
+      "missing_skills_f1": 0.5050186285375328,
+      "fail_reasons": {
+        "quote_length": 32,
+        "missing_skill_in_resume": 16,
+        "quote_not_in_posting": 16,
+        "missing_keys": 1
+      },
+      "coverage": 0.3333333333333333
+    },
+    "qwen3-4b-explain-llamacpp-cuda-Q4_K_M": {
+      "n": 120,
+      "valid_json": 1.0,
+      "strict_pass": 0.5333333333333333,
+      "citation_precision": 0.9331896551724138,
+      "missing_skill_precision": 0.9793233082706767,
+      "matched_skills_f1": 0.7212930317193236,
+      "missing_skills_f1": 0.5229720930095242,
+      "fail_reasons": {
+        "quote_length": 30,
+        "quote_not_in_posting": 20,
+        "missing_skill_in_resume": 18
+      },
+      "coverage": 0.3333333333333333
+    }
+  },
+  "paired_strict_pass_ci95": {
+    "qwen3-4b-explain-llamacpp-cuda-Q8_0 - qwen3-4b-explain-llamacpp-cuda-f16": [
+      -0.016666666666666666,
+      -0.08333333333333333,
+      0.05
+    ],
+    "qwen3-4b-explain-llamacpp-cuda-Q4_K_M - qwen3-4b-explain-llamacpp-cuda-f16": [
+      -0.03333333333333333,
+      -0.11666666666666667,
+      0.041666666666666664
+    ]
+  },
+  "n_common": 120
+}

@@ -8,7 +8,7 @@ pass (paired +30.6 pts, 95% CI 24.2–36.9) and quote precision from 75.6% → 9
 student **matches gpt-oss-120b** (65.0% vs 61.7% strict pass; paired diff +3.3 pts, CI −13 to +20) at 1/30 of the
 total parameters (gpt-oss is a MoE with ~5B active), and every student beats it on missing-skills F1. Everything ran on free tiers (Kaggle 2×T4, Groq free API).
 
-**Status:** all three students trained and scored; serving benchmark and CPU deployment next.
+**Status:** three students trained and scored, serving benchmark done; CPU Space deployment next.
 Design: [docs/design.md](docs/design.md).
 
 Part of a three-project series:
@@ -55,6 +55,47 @@ Findings:
   wide, so the honest claim is "no detectable gap", not "better".
 - **The remaining errors are quote length** (quotes just outside 5–25 words: 88/360 for 0.6B, 93/360 for 4B) — a data issue, not
   a capacity one: the 14B teacher paraphrased often, and only 26% of its outputs passed strictly (see below).
+
+## Serving: formats × engines
+
+One Kaggle T4 per GPU row; CPU rows hide the GPUs and use 4 threads. Latency = one request at a time
+(~1.5k-token prompt, ~300 generated tokens). Throughput = every eval prompt over 8 llama.cpp slots; cost at
+$0.35 per T4-hour. Notebooks: `scripts/make_bench_notebook.py`; raw rows in the private data repo `bench/`.
+
+| Model | Engine / format | Size | p50 latency | Gen tok/s (1 stream) | 8-slot throughput | $ / 1k requests |
+|---|---|---|---|---|---|---|
+| 0.6B | Transformers fp16 (T4) | 1.19 GB | 13.0 s | 23 | — | — |
+| 0.6B | Transformers NF4 (T4) | 0.53 GB | 19.2 s | 18 | — | — |
+| 0.6B | llama.cpp f16 (T4) | 1.20 GB | 3.2 s | 101 | 1.10 req/s | $0.09 |
+| 0.6B | llama.cpp Q8_0 (T4) | 0.64 GB | 2.2 s | 159 | 1.05 req/s | $0.09 |
+| 0.6B | **llama.cpp Q4_K_M (T4)** | **0.40 GB** | **1.7 s** | **190** | 1.10 req/s | $0.09 |
+| 0.6B | llama.cpp Q8_0 (CPU ×4) | 0.64 GB | 32.1 s | 14 | — | — |
+| 0.6B | **llama.cpp Q4_K_M (CPU ×4)** | 0.40 GB | **24.8 s** | 17 | — | free |
+| 4B | Transformers fp16 (T4) | 8.05 GB | 23.5 s | 14 | — | — |
+| 4B | Transformers NF4 (T4) | 2.60 GB | 23.7 s | 14 | — | — |
+| 4B | llama.cpp f16 (T4) | 8.05 GB | 13.8 s | 26 | 0.33 req/s | $0.29 |
+| 4B | llama.cpp Q4_K_M (T4) | 2.50 GB | 7.0 s | 53 | 0.32 req/s | $0.31 |
+| 4B | llama.cpp Q4_K_M (CPU ×4) | 2.50 GB | 103.6 s | 5 | — | — |
+
+**Does quantization cost quality?** Same eval prompts through each GGUF (llama.cpp, greedy):
+
+| Model | f16 | Q8_0 | Q4_K_M | Q4_K_M − f16 (paired 95% CI) |
+|---|---|---|---|---|
+| 0.6B (360 pairs) | 48.9% | 48.9% | 48.3% | −0.6 pts (−6.4 to +5.3) |
+| 4B (120 pairs) | 56.7% | 55.0% | 53.3% | −3.3 pts (−11.7 to +4.2) |
+
+Findings:
+- **Q4_K_M is free quality-wise for the 0.6B** (−0.6 pts, quote precision 93.2% → 90.6%) at a third of the size,
+  so it is the deployment format. For the 4B the point estimate drops 3 pts; Q8_0 is the safer 4B choice.
+- **A serving engine matters more than the format:** the same fp16 weights generate 4.3× faster in llama.cpp than
+  in Transformers `generate` (101 vs 23 tok/s), and Q4_K_M adds another 1.9×. bitsandbytes NF4 saves memory but is
+  *slower* than fp16 on a T4 (dequantization on every matmul).
+- **8 slots only ~2× a single stream** and throughput is flat across formats (1.1 req/s for all three 0.6B
+  GGUFs), so the batch bottleneck is not the GPU matmuls (likely per-token CPU work on Kaggle's 4 vCPUs; not
+  investigated). Even so, a T4 serves 1k explanations for ~$0.09.
+- **CPU-only is usable but slow:** ~25 s per explanation for the 0.6B Q4_K_M on 4 cores (prompt processing at
+  ~150 tok/s is ~10 s of it). A free 2-vCPU Hugging Face Space will be slower still, so in the app the student is
+  the *unlimited fallback* behind Groq (~2 s), not the primary. The 4B is not viable on CPU (~100 s).
 
 ## Pipeline
 

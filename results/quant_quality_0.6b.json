@@ -1,0 +1,71 @@
+{
+  "systems": {
+    "qwen3-0.6b-explain-llamacpp-cuda-f16": {
+      "n": 360,
+      "valid_json": 0.9888888888888889,
+      "strict_pass": 0.4888888888888889,
+      "citation_precision": 0.9316455696202531,
+      "missing_skill_precision": 0.9729247247842904,
+      "matched_skills_f1": 0.5832287674124969,
+      "missing_skills_f1": 0.4479622902310837,
+      "fail_reasons": {
+        "quote_length": 92,
+        "missing_skill_in_resume": 67,
+        "quote_not_in_posting": 64,
+        "missing_keys": 2,
+        "bad_types": 1,
+        "no_json": 1
+      },
+      "coverage": 1.0
+    },
+    "qwen3-0.6b-explain-llamacpp-cuda-Q8_0": {
+      "n": 360,
+      "valid_json": 0.9916666666666667,
+      "strict_pass": 0.4888888888888889,
+      "citation_precision": 0.9271523178807947,
+      "missing_skill_precision": 0.9740566037735849,
+      "matched_skills_f1": 0.603782399359976,
+      "missing_skills_f1": 0.4451161595763928,
+      "fail_reasons": {
+        "quote_length": 93,
+        "quote_not_in_posting": 73,
+        "missing_skill_in_resume": 66,
+        "missing_keys": 2,
+        "n_evidence": 1,
+        "no_json": 1
+      },
+      "coverage": 1.0
+    },
+    "qwen3-0.6b-explain-llamacpp-cuda-Q4_K_M": {
+      "n": 360,
+      "valid_json": 0.9694444444444444,
+      "strict_pass": 0.48333333333333334,
+      "citation_precision": 0.9063604240282686,
+      "missing_skill_precision": 0.961440407903123,
+      "matched_skills_f1": 0.5519583179035713,
+      "missing_skills_f1": 0.40517201475386805,
+      "fail_reasons": {
+        "quote_not_in_posting": 79,
+        "quote_length": 71,
+        "missing_skill_in_resume": 71,
+        "missing_keys": 8,
+        "no_json": 3,
+        "n_evidence": 1
+      },
+      "coverage": 1.0
+    }
+  },
+  "paired_strict_pass_ci95": {
+    "qwen3-0.6b-explain-llamacpp-cuda-Q8_0 - qwen3-0.6b-explain-llamacpp-cuda-f16": [
+      0.0,
+      -0.03895833333333331,
+      0.03888888888888889
+    ],
+    "qwen3-0.6b-explain-llamacpp-cuda-Q4_K_M - qwen3-0.6b-explain-llamacpp-cuda-f16": [
+      -0.005555555555555556,
+      -0.06388888888888888,
+      0.05277777777777778
+    ]
+  },
+  "n_common": 360
+}
